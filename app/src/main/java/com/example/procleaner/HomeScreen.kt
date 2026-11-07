@@ -44,7 +44,7 @@ fun Stat(label: String, value: String) {
 }
 
 @Composable
-fun HomeScreen(state: CleanState, resumes: Int, onScan: () -> Unit, onOpenClean: () -> Unit) {
+fun HomeScreen(state: CleanState, resumes: Int, onScan: () -> Unit, onOpenClean: () -> Unit, onBoost: (Int) -> Unit) {
     val ctx = LocalContext.current
     val access = remember(resumes) { hasAccess(ctx) }
     val base = remember { Environment.getExternalStorageDirectory().path }
@@ -68,6 +68,13 @@ fun HomeScreen(state: CleanState, resumes: Int, onScan: () -> Unit, onOpenClean:
                 Stat("Used", fmt(ctx, used))
                 Stat("Free", fmt(ctx, free))
                 Stat("RAM used", "${fmt(ctx, mi.totalMem - mi.availMem)} / ${fmt(ctx, mi.totalMem)}")
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = { onBoost(0) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Boost RAM") }
+                FilledTonalButton(onClick = { onBoost(1) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Clean cache") }
+                FilledTonalButton(onClick = { onBoost(2) }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("Sleep apps") }
             }
         }
         item {

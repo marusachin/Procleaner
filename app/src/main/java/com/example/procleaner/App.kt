@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -32,6 +33,7 @@ fun App() {
     val state = remember { CleanState() }
     var tab by remember { mutableIntStateOf(0) }
     var resumes by remember { mutableIntStateOf(0) }
+    var boostTab by remember { mutableIntStateOf(0) }
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) resumes++ }
@@ -42,7 +44,7 @@ fun App() {
         if (!hasAccess(ctx)) openAccessSettings(ctx)
         else if (!state.scanning) scope.launch { state.scan() }
     }
-    val tabs = listOf("Home" to Icons.Default.Home, "Clean" to Icons.Default.Delete,
+    val tabs = listOf("Home" to Icons.Default.Home, "Clean" to Icons.Default.Delete, "Boost" to Icons.Default.Settings,
         "Apps" to Icons.Default.Menu, "Device" to Icons.Default.Info)
     Scaffold(bottomBar = {
         NavigationBar {
@@ -54,9 +56,10 @@ fun App() {
     }) { pad ->
         androidx.compose.foundation.layout.Box(Modifier.padding(pad)) {
             when (tab) {
-                0 -> HomeScreen(state, resumes, scan) { tab = 1 }
+                0 -> HomeScreen(state, resumes, scan, onOpenClean = { tab = 1 }, onBoost = { i -> boostTab = i; tab = 2 })
                 1 -> CleanScreen(state, scan)
-                2 -> AppsScreen(resumes)
+                2 -> BoostScreen(boostTab, { boostTab = it }, resumes)
+                3 -> AppsScreen(resumes)
                 else -> DeviceScreen(resumes)
             }
         }
