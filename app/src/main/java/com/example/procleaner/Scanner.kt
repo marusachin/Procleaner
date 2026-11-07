@@ -14,9 +14,13 @@ import java.security.MessageDigest
 enum class Cat(val label: String, val desc: String, val defaultOn: Boolean) {
     TEMP("Temp, log & backup files", "Files ending in .tmp .log .bak .old .chk .dmp", true),
     THUMBS("Thumbnail caches", "Hidden .thumbnails folders that Android rebuilds", true),
+    HIDDEN("Hidden cache folders", "Files inside hidden folders named .cache .tmp .temp .thumbs that apps rebuild", true),
     APK("Leftover APK installers", "Installer files you no longer need after installing apps", true),
     EMPTY("Empty folders", "Folders with nothing inside", true),
     DUP("Duplicate files", "Identical copies (same content). One copy of each is kept", true),
+    TRASH("Hidden trash / recycle bins", "Deleted items still stored in .Trash folders (e.g. Samsung Gallery). Gone forever once cleaned", false),
+    STATUS("WhatsApp viewed statuses", "Copies of statuses you have watched. Unticked so you can save any first", false),
+    WA_SENT("WhatsApp sent-media copies", "Copies of media you sent, kept in WhatsApp Sent folders", false),
     OLD_DL("Old downloads", "Files in Download untouched for over 90 days", false),
     LARGE("Large files", "Files over 100 MB. Check these yourself, may be videos you want", false)
 }
@@ -67,7 +71,19 @@ class CleanState {
 
 object Scanner {
     private val junkExt = setOf("tmp", "temp", "log", "bak", "old", "chk", "dmp")
+    private val cacheNames = setOf(".cache", ".tmp", ".temp", ".thumbs", ".thumbnail", ".dthumb")
+    private val trashNames = setOf(".trash", ".trashbin")
     private const val LARGE = 100L * 1024 * 1024
+
+    private fun hiddenDir(f: File, root: File): String? {
+        var p = f.parentFile
+        while (p != null && p != root) {
+            val n = p.name.lowercase()
+            if (n == ".thumbnails" || n in cacheNames || n in trashNames) return p.name
+            p = p.parentFile
+        }
+        return null
+    }
     private const val DUP_MIN = 50L * 1024
 
     suspend fun scan(root: File, onProgress: (Int, String) -> Unit): ScanResult = withContext(Dispatchers.IO) {
@@ -78,7 +94,7 @@ object Scanner {
         val oldCut = System.currentTimeMillis() - 90L * 24 * 3600 * 1000
         var n = 0
         root.walkTopDown()
-            .onEnter { d -> !(d.name == "Android" && d.parentFile == root) }
+            .onEnter { d -> !(d.parentFile?.name == "Android" && d.parentFile?.parentFile == root && (d.name == "data" || d.name == "obb")) }
             .forEach { f ->
                 ensureActive()
                 if (++n % 200 == 0) onProgress(n, f.parent ?: "")
@@ -90,11 +106,22 @@ object Scanner {
                 val ext = f.extension.lowercase()
                 val t = typeOf(ext)
                 cnt[t.ordinal]++; sz[t.ordinal] += len
+                val hid = hiddenDir(f, root)
                 when {
-                    f.parentFile?.name == ".thumbnails" -> out += Item(f, len, Cat.THUMBS)
+                    f.parentFile?.name.equals(".Statuses", true) -> out += Item(f, len, Cat.STATUS)
+                    hid != null -> {
+                        val k = hid.lowercase()
+                        val c = when {
+                            k == ".thumbnails" -> Cat.THUMBS
+                            k in trashNames -> Cat.TRASH
+                            else -> Cat.HIDDEN
+                        }
+                        out += Item(f, len, c, "In hidden folder $hid")
+                    }
                     ext in junkExt -> out += Item(f, len, Cat.TEMP)
                     ext == "apk" -> out += Item(f, len, Cat.APK)
                     else -> {
+                        if (f.path.contains("/WhatsApp", true) && f.parentFile?.name == "Sent") out += Item(f, len, Cat.WA_SENT)
                         if (len >= LARGE) out += Item(f, len, Cat.LARGE)
                         if (f.path.contains("/Download/") && f.lastModified() < oldCut) out += Item(f, len, Cat.OLD_DL)
                         if (len >= DUP_MIN) bySize.getOrPut(len) { mutableListOf() }.add(f)

@@ -1,6 +1,7 @@
 package com.example.procleaner
 
 import android.app.ActivityManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -62,11 +63,25 @@ fun openAppSettings(ctx: Context, pkg: String) {
 fun openHibernate(ctx: Context, pkg: String) {
     val u = Uri.parse("package:$pkg")
     try {
-        if (Build.VERSION.SDK_INT >= 30) ctx.startActivity(Intent("android.intent.action.AUTO_REVOKE_PERMISSIONS", u))
+        if (Build.VERSION.SDK_INT >= 30 && !Build.MANUFACTURER.equals("samsung", true)) ctx.startActivity(Intent("android.intent.action.AUTO_REVOKE_PERMISSIONS", u))
         else ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, u))
     } catch (e: Exception) {
         try { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, u)) } catch (e2: Exception) { }
     }
+}
+
+// type: 0 = Sleeping apps, 1 = Deep sleeping apps, 2 = Never sleeping apps
+fun openSamsungSleep(ctx: Context, type: Int): Boolean {
+    val tries = listOf(
+        Intent("com.samsung.android.sm.ACTION_OPEN_CHECKABLE_LISTACTIVITY").setPackage("com.samsung.android.lool").putExtra("activity_type", type),
+        Intent().setComponent(ComponentName("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity")),
+        Intent().setComponent(ComponentName("com.samsung.android.sm", "com.samsung.android.sm.ui.battery.BatteryActivity")),
+        ctx.packageManager.getLaunchIntentForPackage("com.samsung.android.lool") ?: Intent(Settings.ACTION_BATTERY_SAVER_SETTINGS)
+    )
+    for (i in tries) {
+        try { ctx.startActivity(i); return true } catch (e: Exception) { }
+    }
+    return false
 }
 
 @Composable
@@ -212,18 +227,41 @@ fun CacheTab(apps: List<AppRow>, resumes: Int) {
 @Composable
 fun SleepTab(apps: List<AppRow>) {
     val ctx = LocalContext.current
+    val samsung = remember { Build.MANUFACTURER.equals("samsung", true) }
     var sleep by remember { mutableStateOf(Prefs.get(ctx, "sleep")) }
     var msg by remember { mutableStateOf("") }
+    val picked = apps.filter { it.pkg in sleep }
+
+    fun openList(t: Int, name: String) {
+        if (!openSamsungSleep(ctx, t)) msg = "Couldn't open $name. Go to Settings, Battery, Background usage limits."
+    }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            NoteCard("Only Android itself can keep an app in deep sleep. Sleep here stops the app's background activity right now, then opens its settings so you can choose 'Pause app activity if unused' or set Battery to Restricted. Tick apps to build your sleep list, then use the button to stop them all at once.")
+            NoteCard(
+                if (samsung) "Samsung keeps apps asleep with its own lists, and Android doesn't let other apps add to them. Tick apps below to make a shortlist, open the list you want, tap + and add them. 'Stop' ends an app's background activity right now."
+                else "Only Android itself can keep an app in deep sleep. 'Stop' ends an app's background activity right now, then opens its settings so you can set Battery to Restricted."
+            )
+        }
+        if (samsung) item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Samsung sleep lists", style = MaterialTheme.typography.titleMedium)
+                    Button(modifier = Modifier.fillMaxWidth(), onClick = { openList(0, "Sleeping apps") }) { Text("Sleeping apps") }
+                    Button(modifier = Modifier.fillMaxWidth(), onClick = { openList(1, "Deep sleeping apps") }) { Text("Deep sleeping apps") }
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = { openList(2, "Never sleeping apps") }) { Text("Never sleeping apps") }
+                    if (picked.isNotEmpty()) Text(
+                        "Add these inside the list: " + picked.joinToString(", ") { it.label },
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
         item {
             Button(modifier = Modifier.fillMaxWidth(), enabled = sleep.isNotEmpty(), onClick = {
                 sleep.forEach { stopApp(ctx, it) }
-                msg = "Stopped ${sleep.size} apps in your sleep list."
-            }) { Text("Sleep my list now (${sleep.size})") }
+                msg = "Stopped ${sleep.size} apps in your list."
+            }) { Text("Stop my list now (${sleep.size})") }
         }
         item {
             OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
@@ -240,7 +278,7 @@ fun SleepTab(apps: List<AppRow>) {
                 TextButton(onClick = {
                     stopApp(ctx, a.pkg)
                     openHibernate(ctx, a.pkg)
-                }) { Text("Sleep") }
+                }) { Text("Stop") }
             }
         }
     }
