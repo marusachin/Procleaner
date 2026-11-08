@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -45,7 +46,7 @@ fun App() {
         else if (!state.scanning) scope.launch { state.scan(ctx) }
     }
     val tabs = listOf("Home" to Icons.Default.Home, "Clean" to Icons.Default.Delete, "Boost" to Icons.Default.Settings,
-        "Apps" to Icons.Default.Menu, "Device" to Icons.Default.Info)
+        "Apps" to Icons.Default.Menu, "Device" to Icons.Default.Info, "Network" to Icons.Default.Wifi)
     Scaffold(bottomBar = {
         NavigationBar {
             tabs.forEachIndexed { i, (t, ic) ->
@@ -60,7 +61,8 @@ fun App() {
                 1 -> CleanScreen(state, scan)
                 2 -> BoostScreen(boostTab, { boostTab = it }, resumes)
                 3 -> AppsScreen(resumes)
-                else -> DeviceScreen(resumes)
+                4 -> DeviceScreen(resumes)
+                else -> NetworkScreen(resumes)
             }
         }
     }
