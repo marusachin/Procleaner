@@ -2,6 +2,10 @@ package com.example.procleaner
 
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
+import android.os.Build
+import android.telephony.TelephonyManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +27,28 @@ fun NetworkScreen(resumes: Int) {
     val network = remember(resumes) { cm.activeNetwork }
     val caps = remember(resumes) { network?.let { cm.getNetworkCapabilities(it) } }
     val links = remember(resumes) { network?.let { cm.getLinkProperties(it) } }
+    val wifiRssi = remember(resumes, caps) {
+        if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) != true) null
+        else {
+            val wifiInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                caps.transportInfo as? WifiInfo
+            } else {
+                ctx.getSystemService(WifiManager::class.java).connectionInfo
+            }
+            wifiInfo?.rssi?.takeIf { it in -126..-1 }
+        }
+    }
+    val cellSignal = remember(resumes, caps) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P ||
+            caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) != true
+        ) null else runCatching {
+            ctx.getSystemService(TelephonyManager::class.java).signalStrength
+        }.getOrNull()
+    }
+    val cellDbm = remember(cellSignal) {
+        cellSignal?.cellSignalStrengths?.maxByOrNull { it.level }?.dbm
+            ?.takeIf { it in -200..-1 }
+    }
     val type = when {
         caps == null -> "Offline"
         caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "VPN"
@@ -78,6 +104,31 @@ fun NetworkScreen(resumes: Int) {
                     Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    Text("Signal strength", style = MaterialTheme.typography.titleMedium)
+                    InfoRow("Wi-Fi", wifiRssi?.let { "$it dBm · ${wifiQuality(it)}" } ?: "Not connected")
+                    InfoRow(
+                        "Cellular",
+                        cellSignal?.let {
+                            val bars = "${it.level}/4 bars"
+                            if (cellDbm != null) "$cellDbm dBm · $bars" else bars
+                        } ?: if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true) {
+                            "Unavailable"
+                        } else "Not connected"
+                    )
+                    Text(
+                        "Cellular strength is the latest reading available from Android and may be delayed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        item {
+            Card {
+                androidx.compose.foundation.layout.Column(
+                    Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text("Network addresses", style = MaterialTheme.typography.titleMedium)
                     InfoRow("Local IP", addresses.ifBlank { "Unavailable" })
                     InfoRow("Gateway", gateway)
@@ -93,4 +144,11 @@ fun NetworkScreen(resumes: Int) {
             )
         }
     }
+}
+
+private fun wifiQuality(rssi: Int): String = when {
+    rssi >= -50 -> "Excellent"
+    rssi >= -60 -> "Good"
+    rssi >= -70 -> "Fair"
+    else -> "Weak"
 }
