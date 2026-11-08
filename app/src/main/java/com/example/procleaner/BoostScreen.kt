@@ -7,6 +7,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.StatFs
+import android.os.storage.StorageManager
 import android.provider.Settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -28,11 +30,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 
 object Prefs {
     private fun sp(ctx: Context) = ctx.getSharedPreferences("procleaner", Context.MODE_PRIVATE)
     fun get(ctx: Context, key: String): Set<String> = (sp(ctx).getStringSet(key, emptySet()) ?: emptySet()).toSet()
     fun put(ctx: Context, key: String, v: Set<String>) { sp(ctx).edit().putStringSet(key, v).apply() }
+    fun getBool(ctx: Context, key: String, def: Boolean = false): Boolean = sp(ctx).getBoolean(key, def)
+    fun putBool(ctx: Context, key: String, v: Boolean) { sp(ctx).edit().putBoolean(key, v).apply() }
+    fun getLong(ctx: Context, key: String): Long = sp(ctx).getLong(key, 0L)
+    fun putLong(ctx: Context, key: String, v: Long) { sp(ctx).edit().putLong(key, v).apply() }
+    fun getString(ctx: Context, key: String): String = sp(ctx).getString(key, "") ?: ""
+    fun putString(ctx: Context, key: String, v: String) { sp(ctx).edit().putString(key, v).apply() }
 }
 
 fun toggle(s: Set<String>, k: String): Set<String> = if (k in s) s - k else s + k
@@ -54,6 +63,23 @@ fun clearExternalCaches(ctx: Context): Long {
         n += clearDirContents(File(app, "cache"))
     }
     return n
+}
+
+/** Asks Android to make room, which makes the system delete other apps' cached files. Returns bytes gained. */
+fun freeSystemCache(ctx: Context): Long {
+    return try {
+        val sm = ctx.getSystemService(StorageManager::class.java)
+        val uuid = sm.getUuidForPath(ctx.filesDir)
+        val statPath = Environment.getDataDirectory().path
+        val before = StatFs(statPath).availableBytes
+        val want = sm.getAllocatableBytes(uuid)
+        val f = File(ctx.filesDir, "alloc.tmp")
+        try {
+            FileOutputStream(f).use { out -> sm.allocateBytes(out.fd, want) }
+        } catch (e: Exception) { }
+        f.delete()
+        (StatFs(statPath).availableBytes - before).coerceAtLeast(0L)
+    } catch (e: Exception) { 0L }
 }
 
 fun openAppSettings(ctx: Context, pkg: String) {
@@ -129,11 +155,18 @@ fun RamTab(apps: List<AppRow>) {
     val am = remember { ctx.getSystemService(ActivityManager::class.java) }
     var tick by remember { mutableIntStateOf(0) }
     var keep by remember { mutableStateOf(Prefs.get(ctx, "keep")) }
-    var msg by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var before by remember { mutableStateOf<Pair<Long, Long>?>(null) }   // used, free
+    var after by remember { mutableStateOf<Pair<Long, Long>?>(null) }
     val mi = remember(tick) { ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) } }
     val used = mi.totalMem - mi.availMem
     val targets = apps.filter { it.pkg !in keep && it.pkg != ctx.packageName }
+
+    fun snap(): Pair<Long, Long> {
+        val m = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(m)
+        return (m.totalMem - m.availMem) to m.availMem
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp),
@@ -147,27 +180,53 @@ fun RamTab(apps: List<AppRow>) {
             Button(modifier = Modifier.fillMaxWidth().height(52.dp), enabled = !busy && targets.isNotEmpty(), onClick = {
                 scope.launch {
                     busy = true
-                    val b = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.availMem
+                    after = null
+                    before = snap()
                     targets.forEach { stopApp(ctx, it.pkg) }
-                    delay(2000)
-                    val a = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.availMem
-                    msg = if (a > b) "Freed ${fmt(ctx, a - b)}. Free RAM is now ${fmt(ctx, a)}."
-                    else "Stopped ${targets.size} apps. Free RAM is ${fmt(ctx, a)}; few apps were running in the background."
-                    tick++; busy = false
+                    delay(1200)
+                    targets.forEach { stopApp(ctx, it.pkg) }
+                    delay(1800)
+                    after = snap()
+                    tick++
+                    busy = false
                 }
             }) { Text(if (busy) "Boosting…" else "Boost RAM now (${targets.size} apps)") }
         }
-        if (msg.isNotEmpty()) item { Text(msg, color = MaterialTheme.colorScheme.primary) }
+        val b = before
+        val a = after
+        if (b != null) item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Boost result", style = MaterialTheme.typography.titleMedium)
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
+                        Stat("Before", "${fmt(ctx, b.first)} used")
+                        Stat("After", if (a != null) "${fmt(ctx, a.first)} used" else "measuring…")
+                    }
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {
+                        Stat("Free before", fmt(ctx, b.second))
+                        Stat("Free after", if (a != null) fmt(ctx, a.second) else "…")
+                    }
+                    if (a != null) {
+                        val d = a.second - b.second
+                        Text(
+                            if (d > 0) "Freed ${fmt(ctx, d)} of RAM"
+                            else "No extra RAM freed. The apps were already stopped, or Android restarted them.",
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
         item { Text("Apps to stop (untick to leave running)", style = MaterialTheme.typography.titleSmall, modifier = Modifier.fillMaxWidth()) }
-        items(apps, key = { it.pkg }) { a ->
+        items(apps, key = { it.pkg }) { app ->
             Row(
-                Modifier.fillMaxWidth().clickable { keep = toggle(keep, a.pkg); Prefs.put(ctx, "keep", keep) },
+                Modifier.fillMaxWidth().clickable { keep = toggle(keep, app.pkg); Prefs.put(ctx, "keep", keep) },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Checkbox(checked = a.pkg !in keep, onCheckedChange = { keep = toggle(keep, a.pkg); Prefs.put(ctx, "keep", keep) })
-                AppIcon(a.pkg)
+                Checkbox(checked = app.pkg !in keep, onCheckedChange = { keep = toggle(keep, app.pkg); Prefs.put(ctx, "keep", keep) })
+                AppIcon(app.pkg)
                 Spacer(Modifier.width(10.dp))
-                Text(a.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(app.label, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -178,13 +237,15 @@ fun CacheTab(apps: List<AppRow>, resumes: Int) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val usage = remember(resumes) { hasUsage(ctx) }
+    val a11y = remember(resumes) { a11yEnabled(ctx) }
     var msg by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
     val withCache = apps.filter { it.cacheB > 0 }.sortedByDescending { it.cacheB }
     val total = withCache.sumOf { it.cacheB }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            NoteCard("Android doesn't let one app delete another app's cache. 'Clean what I can now' clears what is allowed on your phone. For the rest, tap Clear beside an app, then choose Storage and Clear cache.")
+            NoteCard("Two ways to clear cache: 'Clear all caches now' asks Android to free space, and it deletes other apps' cached files itself. 'Auto-clear' opens each app's Storage page and taps Clear cache for you.")
         }
         if (!usage) item {
             Card(Modifier.fillMaxWidth()) {
@@ -196,13 +257,41 @@ fun CacheTab(apps: List<AppRow>, resumes: Int) {
         }
         item { Text("Total app cache: ${fmt(ctx, total)}", style = MaterialTheme.typography.titleLarge) }
         item {
-            Button(modifier = Modifier.fillMaxWidth(), onClick = {
+            Button(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
                 scope.launch {
-                    val n = withContext(Dispatchers.IO) { clearExternalCaches(ctx) }
-                    msg = if (n > 0) "Cleared ${fmt(ctx, n)}."
-                    else "Nothing could be cleared directly. On Android 11 and newer, use the Clear buttons below."
+                    busy = true
+                    msg = "Clearing…"
+                    val sys = withContext(Dispatchers.IO) { freeSystemCache(ctx) }
+                    val own = withContext(Dispatchers.IO) { clearExternalCaches(ctx) }
+                    msg = if (sys + own > 0) "Freed ${fmt(ctx, sys + own)}. Open this tab again to see the new cache sizes."
+                    else "Android didn't free anything this time. Try Auto-clear below."
+                    busy = false
                 }
-            }) { Text("Clean what I can now") }
+            }) { Text(if (busy) "Clearing…" else "Clear all caches now") }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Auto-clear, app by app", style = MaterialTheme.typography.titleMedium)
+                    if (!a11y) {
+                        Text("Needs the Pro Cleaner accessibility service. It only works inside the Settings app, and only after you press Auto-clear.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Text("If Android says 'Restricted setting': Settings, Apps, Pro Cleaner, ⋮ menu, Allow restricted settings. Then try again.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Button(onClick = { ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }) { Text("Turn on accessibility") }
+                    } else if (AutoClear.running) {
+                        Text("Clearing… ${AutoClear.cleared} done, ${AutoClear.left} left. Don't touch the screen.")
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        OutlinedButton(onClick = { AutoClear.stop() }) { Text("Stop") }
+                    } else {
+                        Text("Accessibility is on. Pro Cleaner will open each app's Storage page and tap Clear cache. Keep the screen on.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Button(enabled = withCache.isNotEmpty(), onClick = { AutoClear.start(ctx, withCache.map { it.pkg }) }) {
+                            Text("Auto-clear all (${withCache.size} apps)")
+                        }
+                    }
+                }
+            }
         }
         item {
             OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
@@ -210,15 +299,17 @@ fun CacheTab(apps: List<AppRow>, resumes: Int) {
             }) { Text("Open system storage screen") }
         }
         if (msg.isNotEmpty()) item { Text(msg, color = MaterialTheme.colorScheme.primary) }
-        items(withCache, key = { it.pkg }) { a ->
+        items(withCache, key = { it.pkg }) { app ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(a.pkg)
+                AppIcon(app.pkg)
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(a.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("Cache ${fmt(ctx, a.cacheB)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text(app.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("Cache ${fmt(ctx, app.cacheB)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
-                TextButton(onClick = { openAppSettings(ctx, a.pkg) }) { Text("Clear") }
+                TextButton(onClick = {
+                    if (a11y && !AutoClear.running) AutoClear.start(ctx, listOf(app.pkg)) else openAppSettings(ctx, app.pkg)
+                }) { Text("Clear") }
             }
         }
     }

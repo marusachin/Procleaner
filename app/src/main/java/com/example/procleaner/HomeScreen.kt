@@ -62,6 +62,24 @@ fun HomeScreen(state: CleanState, resumes: Int, onScan: () -> Unit, onOpenClean:
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         item { Text("Pro Cleaner", style = MaterialTheme.typography.headlineMedium) }
+        if (free * 100 / total < 15) item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Storage almost full: ${fmt(ctx, free)} free (${free * 100 / total}%)",
+                        style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                    Text(
+                        if (state.types.isNotEmpty()) "Biggest: " + state.types.entries.sortedByDescending { it.value.second }
+                            .take(3).joinToString(", ") { "${it.key.label} ${fmt(ctx, it.value.second)}" }
+                        else "Scan to see what is using the space.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Button(onClick = onScan, enabled = !state.scanning) { Text("Scan now") }
+                }
+            }
+        }
         item { Ring(used.toFloat() / total, "${used * 100 / total}%", "of ${fmt(ctx, total)} used") }
         item {
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceEvenly) {

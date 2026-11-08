@@ -42,7 +42,7 @@ fun App() {
     }
     val scan: () -> Unit = {
         if (!hasAccess(ctx)) openAccessSettings(ctx)
-        else if (!state.scanning) scope.launch { state.scan() }
+        else if (!state.scanning) scope.launch { state.scan(ctx) }
     }
     val tabs = listOf("Home" to Icons.Default.Home, "Clean" to Icons.Default.Delete, "Boost" to Icons.Default.Settings,
         "Apps" to Icons.Default.Menu, "Device" to Icons.Default.Info)

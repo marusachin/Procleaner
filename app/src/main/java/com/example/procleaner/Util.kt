@@ -6,6 +6,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import android.webkit.MimeTypeMap
+import androidx.core.content.FileProvider
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -50,3 +53,24 @@ fun thumb(f: File, px: Int = 96): Bitmap? = try {
     while (o.outWidth / (s * 2) >= px && o.outHeight / (s * 2) >= px) s *= 2
     BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = s })
 } catch (e: Exception) { null }
+
+fun videoThumb(f: File): Bitmap? {
+    val r = MediaMetadataRetriever()
+    return try {
+        r.setDataSource(f.path)
+        val b = r.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: r.getFrameAtTime(0)
+        b?.let { Bitmap.createScaledBitmap(it, 160, (160f * it.height / it.width).toInt().coerceAtLeast(1), true) }
+    } catch (e: Exception) { null } finally {
+        try { r.release() } catch (e: Exception) { }
+    }
+}
+
+fun openFile(ctx: Context, f: File) {
+    try {
+        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f)
+        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "*/*"
+        ctx.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(ctx, "No app can open this file", android.widget.Toast.LENGTH_SHORT).show()
+    }
+}

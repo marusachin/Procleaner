@@ -1,5 +1,6 @@
 package com.example.procleaner
 
+import android.content.Context
 import android.os.Environment
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,22 +47,35 @@ class Item(val file: File, val size: Long, val cat: Cat, val note: String = "") 
     var selected by mutableStateOf(cat.defaultOn)
 }
 
-class ScanResult(val items: List<Item>, val types: Map<FType, Pair<Int, Long>>)
+class Entry(val file: File, val size: Long)
+
+class ScanResult(val items: List<Item>, val types: Map<FType, Pair<Int, Long>>, val byType: Map<FType, List<Entry>>)
 
 class CleanState {
     var items by mutableStateOf(listOf<Item>())
     var types by mutableStateOf(mapOf<FType, Pair<Int, Long>>())
+    var byType by mutableStateOf(mapOf<FType, List<Entry>>())
+    var browse by mutableStateOf<FType?>(null)
     var scanning by mutableStateOf(false)
     var scanned by mutableStateOf(false)
     var seen by mutableIntStateOf(0)
     var path by mutableStateOf("")
     var message by mutableStateOf("")
 
-    suspend fun scan() {
+    fun removePaths(gone: Set<String>) {
+        items = items.filter { it.file.path !in gone }
+        val nb = byType.mapValues { (_, v) -> v.filter { it.file.path !in gone } }.filterValues { it.isNotEmpty() }
+        byType = nb
+        types = nb.mapValues { (_, v) -> v.size to v.sumOf { it.size } }
+    }
+
+    suspend fun scan(ctx: Context) {
         scanning = true; message = ""; seen = 0
         try {
             val r = Scanner.scan(Environment.getExternalStorageDirectory()) { n, p -> seen = n; path = p }
-            items = r.items; types = r.types; scanned = true
+            items = r.items; types = r.types; byType = r.byType; scanned = true
+            Prefs.putString(ctx, "top_types", types.entries.sortedByDescending { it.value.second }.take(3)
+                .joinToString(", ") { "${it.key.label} ${fmt(ctx, it.value.second)}" })
             if (items.isEmpty()) message = "Nothing to clean. Your phone is tidy!"
         } finally {
             scanning = false
@@ -86,11 +100,12 @@ object Scanner {
     }
     private const val DUP_MIN = 50L * 1024
 
-    suspend fun scan(root: File, onProgress: (Int, String) -> Unit): ScanResult = withContext(Dispatchers.IO) {
+    suspend fun scan(root: File, quick: Boolean = false, onProgress: (Int, String) -> Unit): ScanResult = withContext(Dispatchers.IO) {
         val out = mutableListOf<Item>()
         val bySize = HashMap<Long, MutableList<File>>()
         val cnt = IntArray(FType.values().size)
         val sz = LongArray(FType.values().size)
+        val lists = Array(FType.values().size) { ArrayList<Entry>() }
         val oldCut = System.currentTimeMillis() - 90L * 24 * 3600 * 1000
         var n = 0
         root.walkTopDown()
@@ -106,6 +121,7 @@ object Scanner {
                 val ext = f.extension.lowercase()
                 val t = typeOf(ext)
                 cnt[t.ordinal]++; sz[t.ordinal] += len
+                if (!quick) lists[t.ordinal].add(Entry(f, len))
                 val hid = hiddenDir(f, root)
                 when {
                     f.parentFile?.name.equals(".Statuses", true) -> out += Item(f, len, Cat.STATUS)
@@ -124,7 +140,7 @@ object Scanner {
                         if (f.path.contains("/WhatsApp", true) && f.parentFile?.name == "Sent") out += Item(f, len, Cat.WA_SENT)
                         if (len >= LARGE) out += Item(f, len, Cat.LARGE)
                         if (f.path.contains("/Download/") && f.lastModified() < oldCut) out += Item(f, len, Cat.OLD_DL)
-                        if (len >= DUP_MIN) bySize.getOrPut(len) { mutableListOf() }.add(f)
+                        if (!quick && len >= DUP_MIN) bySize.getOrPut(len) { mutableListOf() }.add(f)
                     }
                 }
             }
@@ -141,7 +157,9 @@ object Scanner {
         }
         onProgress(n, "")
         val types = FType.values().filter { cnt[it.ordinal] > 0 }.associateWith { cnt[it.ordinal] to sz[it.ordinal] }
-        ScanResult(out, types)
+        val byType = FType.values().filter { lists[it.ordinal].isNotEmpty() }
+            .associateWith { lists[it.ordinal].sortedByDescending { e -> e.size } }
+        ScanResult(out, types, byType)
     }
 
     private fun hash(f: File): String? = try {

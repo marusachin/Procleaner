@@ -1,13 +1,22 @@
 package com.example.procleaner
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.IntentFilter
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Alignment
+import androidx.core.content.ContextCompat
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +36,16 @@ fun InfoRow(label: String, value: String) {
 fun DeviceScreen(resumes: Int) {
     val ctx = LocalContext.current
     var msg by remember { mutableStateOf("") }
+    var autoClean by remember { mutableStateOf(Prefs.getBool(ctx, "auto_clean")) }
+    var lowAlert by remember { mutableStateOf(Prefs.getBool(ctx, "low_alert")) }
+    var runMsg by remember { mutableStateOf("") }
+    val lastAuto = remember(resumes, runMsg) { Prefs.getString(ctx, "last_auto") }
+    val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    fun askNotif() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
     val bi = remember(resumes) { ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED)) }
     val level = bi?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
     val scale = bi?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
@@ -38,6 +57,48 @@ fun DeviceScreen(resumes: Int) {
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("Device", style = MaterialTheme.typography.headlineMedium) }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Automatic care", style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Weekly auto-clean")
+                            Text("Cleans temp files, hidden cache, thumbnails and empty folders, clears caches and stops background apps. Never touches photos, videos or duplicates.",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(checked = autoClean, onCheckedChange = { v ->
+                            autoClean = v
+                            Prefs.putBool(ctx, "auto_clean", v)
+                            if (v) { askNotif(); if (!hasAccess(ctx)) openAccessSettings(ctx) }
+                            Scheduler.refresh(ctx)
+                        })
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Low storage alert")
+                            Text("Sends a notification when free space drops below 15%.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(checked = lowAlert, onCheckedChange = { v ->
+                            lowAlert = v
+                            Prefs.putBool(ctx, "low_alert", v)
+                            if (v) askNotif()
+                            Scheduler.refresh(ctx)
+                        })
+                    }
+                    if (lastAuto.isNotEmpty()) Text("Last auto-clean: $lastAuto", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary)
+                    OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
+                        askNotif()
+                        WorkManager.getInstance(ctx).enqueue(
+                            OneTimeWorkRequestBuilder<AutoCleanWorker>().setInputData(workDataOf("force" to true)).build()
+                        )
+                        runMsg = "Running in the background. You'll get a notification when it's done."
+                    }) { Text("Run auto-clean now") }
+                    if (runMsg.isNotEmpty()) Text(runMsg, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {
