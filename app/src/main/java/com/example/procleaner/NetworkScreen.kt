@@ -46,7 +46,8 @@ fun NetworkScreen(resumes: Int) {
         }.getOrNull()
     }
     val cellDbm = remember(cellSignal) {
-        cellSignal?.cellSignalStrengths?.maxByOrNull { it.level }?.dbm
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) null
+        else cellSignal?.cellSignalStrengths?.maxByOrNull { it.level }?.dbm
             ?.takeIf { it in -200..-1 }
     }
     val type = when {
