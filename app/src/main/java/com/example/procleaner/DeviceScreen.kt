@@ -101,21 +101,6 @@ fun DeviceScreen(resumes: Int) {
         }
         item {
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Scheduled phone restart", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Use Samsung's built-in schedule: Settings → Device care → Auto optimisation → Auto restart → Restart on schedule. Pro Cleaner cannot reboot the phone itself; Samsung handles the restart.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    OutlinedButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = { ctx.startActivity(Intent(Settings.ACTION_SETTINGS)) }
-                    ) { Text("Open phone Settings") }
-                }
-            }
-        }
-        item {
-            Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {
                     Text("Phone", style = MaterialTheme.typography.titleMedium)
                     InfoRow("Model", "${Build.MANUFACTURER} ${Build.MODEL}")
