@@ -35,28 +35,45 @@ fun App() {
     var resumes by remember { mutableIntStateOf(0) }
     var boostTab by remember { mutableIntStateOf(0) }
     val owner = LocalLifecycleOwner.current
+
     DisposableEffect(owner) {
-        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) resumes++ }
-        owner.lifecycle.addObserver(obs)
-        onDispose { owner.lifecycle.removeObserver(obs) }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) resumes++
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
     }
+
     val scan: () -> Unit = {
         if (!hasAccess(ctx)) openAccessSettings(ctx)
         else if (!state.scanning) scope.launch { state.scan(ctx) }
     }
-    val tabs = listOf("Home" to Icons.Default.Home, "Clean" to Icons.Default.Delete, "Boost" to Icons.Default.Settings,
-        "Apps" to Icons.Default.Menu, "Device" to Icons.Default.Info)
+    val tabs = listOf(
+        "Home" to Icons.Default.Home,
+        "Clean" to Icons.Default.Delete,
+        "Tools" to Icons.Default.Settings,
+        "Apps" to Icons.Default.Menu,
+        "Device" to Icons.Default.Info
+    )
+
     Scaffold(bottomBar = {
         NavigationBar {
-            tabs.forEachIndexed { i, (t, ic) ->
-                NavigationBarItem(selected = tab == i, onClick = { tab = i },
-                    icon = { Icon(ic, t) }, label = { Text(t) })
+            tabs.forEachIndexed { index, (label, icon) ->
+                NavigationBarItem(
+                    selected = tab == index,
+                    onClick = { tab = index },
+                    icon = { Icon(icon, contentDescription = label) },
+                    label = { Text(label, maxLines = 1) }
+                )
             }
         }
-    }) { pad ->
-        androidx.compose.foundation.layout.Box(Modifier.padding(pad)) {
+    }) { padding ->
+        androidx.compose.foundation.layout.Box(Modifier.padding(padding)) {
             when (tab) {
-                0 -> HomeScreen(state, resumes, scan, onOpenClean = { tab = 1 }, onBoost = { i -> boostTab = i; tab = 2 })
+                0 -> HomeScreen(state, resumes, scan, onOpenClean = { tab = 1 }, onBoost = { index ->
+                    boostTab = index
+                    tab = 2
+                })
                 1 -> CleanScreen(state, scan)
                 2 -> BoostScreen(boostTab, { boostTab = it }, resumes)
                 3 -> AppsScreen(resumes)
