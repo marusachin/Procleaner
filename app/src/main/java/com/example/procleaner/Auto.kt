@@ -89,13 +89,8 @@ class StorageCheckWorker(ctx: Context, params: WorkerParameters) : CoroutineWork
 object Scheduler {
     fun refresh(ctx: Context) {
         val wm = WorkManager.getInstance(ctx)
-        if (Prefs.getBool(ctx, "auto_clean")) {
-            wm.enqueueUniquePeriodicWork(
-                "auto_clean", ExistingPeriodicWorkPolicy.KEEP,
-                PeriodicWorkRequestBuilder<AutoCleanWorker>(7, TimeUnit.DAYS)
-                    .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build()).build()
-            )
-        } else wm.cancelUniqueWork("auto_clean")
+        // Cleaning now always requires an on-screen review and confirmation.
+        wm.cancelUniqueWork("auto_clean")
         if (Prefs.getBool(ctx, "low_alert")) {
             wm.enqueueUniquePeriodicWork(
                 "low_alert", ExistingPeriodicWorkPolicy.KEEP,

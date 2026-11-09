@@ -13,6 +13,13 @@ android {
         versionCode = 6
         versionName = "1.5"
     }
+    // Install this preview alongside the published app; it must not replace it.
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".ccleaner"
+            versionNameSuffix = "-ccleaner-preview"
+        }
+    }
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     compileOptions {

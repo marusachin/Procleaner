@@ -1,32 +1,30 @@
 package com.example.procleaner
 
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
 
-val SkyScheme = lightColorScheme(
-    primary = Color(0xFF0277BD),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFB3E5FC),
-    onPrimaryContainer = Color(0xFF01334D),
-    secondary = Color(0xFF0288D1),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFCDEBFB),
-    onSecondaryContainer = Color(0xFF0B3A57),
-    tertiary = Color(0xFF00ACC1),
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFB2EBF2),
-    onTertiaryContainer = Color(0xFF00363D),
-    background = Color(0xFFF2FAFF),
-    onBackground = Color(0xFF10222E),
-    surface = Color(0xFFF2FAFF),
-    onSurface = Color(0xFF10222E),
-    surfaceVariant = Color(0xFFD9EDF9),
-    onSurfaceVariant = Color(0xFF3B5566),
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFEAF6FD),
-    surfaceContainer = Color(0xFFE1F2FC),
-    surfaceContainerHigh = Color(0xFFD8EDFA),
-    surfaceContainerHighest = Color(0xFFD0E8F7),
-    outline = Color(0xFF6B8799),
-    outlineVariant = Color(0xFFBBD4E3)
+val SkyScheme = darkColorScheme(
+    primary = Color(0xFF45D483),
+    onPrimary = Color(0xFF00391D),
+    primaryContainer = Color(0xFF00532D),
+    onPrimaryContainer = Color(0xFF8CF8B0),
+    secondary = Color(0xFF70D6A1),
+    onSecondary = Color(0xFF00391D),
+    secondaryContainer = Color(0xFF174B34),
+    onSecondaryContainer = Color(0xFFB7F2CE),
+    tertiary = Color(0xFF78D2C7),
+    onTertiary = Color(0xFF003731),
+    background = Color(0xFF071321),
+    onBackground = Color(0xFFE3EDF8),
+    surface = Color(0xFF0B1B2B),
+    onSurface = Color(0xFFE3EDF8),
+    surfaceVariant = Color(0xFF1A2B3C),
+    onSurfaceVariant = Color(0xFFB8C8D8),
+    surfaceContainerLowest = Color(0xFF06101B),
+    surfaceContainerLow = Color(0xFF0D1E2E),
+    surfaceContainer = Color(0xFF122437),
+    surfaceContainerHigh = Color(0xFF1A2D40),
+    surfaceContainerHighest = Color(0xFF23374B),
+    outline = Color(0xFF71869B),
+    outlineVariant = Color(0xFF40566B)
 )

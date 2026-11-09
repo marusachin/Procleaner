@@ -9,11 +9,11 @@ import androidx.core.view.WindowCompat
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = 0xFFE1F2FC.toInt()
-        window.navigationBarColor = 0xFFE1F2FC.toInt()
+        window.statusBarColor = 0xFF071321.toInt()
+        window.navigationBarColor = 0xFF071321.toInt()
         WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
         }
         Scheduler.refresh(this)
         setContent {

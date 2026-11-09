@@ -114,7 +114,7 @@ fun HomeScreen(state: CleanState, resumes: Int, onScan: () -> Unit, onOpenClean:
         if (state.scanned && !state.scanning) {
             item {
                 val cleanable = state.items.filter { it.cat.defaultOn }.distinctBy { it.file.path }.sumOf { it.size }
-                Text("Found ${fmt(ctx, cleanable)} you can safely clean", style = MaterialTheme.typography.titleMedium,
+                Text("Review ${fmt(ctx, cleanable)} of selected scan results", style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.fillMaxWidth())
             }
             items(Cat.values().filter { grouped[it] != null }) { c ->

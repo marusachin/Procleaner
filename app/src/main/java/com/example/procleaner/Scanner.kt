@@ -13,12 +13,12 @@ import java.io.File
 import java.security.MessageDigest
 
 enum class Cat(val label: String, val desc: String, val defaultOn: Boolean) {
-    TEMP("Temp, log & backup files", "Files ending in .tmp .log .bak .old .chk .dmp", true),
-    THUMBS("Thumbnail caches", "Hidden .thumbnails folders that Android rebuilds", true),
-    HIDDEN("Hidden cache folders", "Files inside hidden folders named .cache .tmp .temp .thumbs that apps rebuild", true),
-    APK("Leftover APK installers", "Installer files you no longer need after installing apps", true),
-    EMPTY("Empty folders", "Folders with nothing inside", true),
-    DUP("Duplicate files", "Identical copies (same content). One copy of each is kept", true),
+    TEMP("Temp, log & backup files", "Review each file before removal", false),
+    THUMBS("Thumbnail caches", "Hidden .thumbnails folders that Android rebuilds", false),
+    HIDDEN("Hidden cache folders", "Review hidden files; folders may contain personal data", false),
+    APK("APK installers", "Installation packages in shared storage", false),
+    EMPTY("Empty folders", "Folders with nothing inside", false),
+    DUP("Duplicate files", "Identical copies; inspect both files before choosing what to remove", false),
     TRASH("Hidden trash / recycle bins", "Deleted items still stored in .Trash folders (e.g. Samsung Gallery). Gone forever once cleaned", false),
     STATUS("WhatsApp viewed statuses", "Copies of statuses you have watched. Unticked so you can save any first", false),
     WA_SENT("WhatsApp sent-media copies", "Copies of media you sent, kept in WhatsApp Sent folders", false),

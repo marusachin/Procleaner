@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="a11y_desc">Lets Pro Cleaner open an app\'s Storage page in Settings and tap Clear cache for you. It only acts after you press Auto-clear, and only inside the Settings app.</string>
+    <string name="app_name">Pro Cleaner CC Preview</string>
 </resources>
